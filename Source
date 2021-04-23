@@ -1,0 +1,142 @@
+#define TRIECHILDSIZE 26
+#define ALPHABET 'a'
+class Trie {
+private:
+	bool finish;		// 노드의 끝인 지 확인
+	vector<unique_ptr<Trie>> child;		// 자식 노드	
+	char value;		// 현재 노드의 문자
+	int count;		// 현재 노드가 가질 수 있는 문자열 개수
+
+public:
+	// 클래스 생성자
+	// 우연찮게 구글링 하다가 배운건데 Class() : Value(0) << 이런식의 초기화는 생성 전 초기화이고,
+	// Class() { Value = 0; } << 이런식의 초기화는 생성 후 초기화 라고 한다.
+	Trie() : finish(false), count(0), value('\0') { child = vector<unique_ptr<Trie>>(TRIECHILDSIZE); }
+	// 클래스 소멸자
+	// 스마트 포인터 사용 전에는 for 문으로 일일일 반복문을 돌려 하나하나 소멸했었다.
+	// 스마트 포인터를 사용하고 나서는 알아서 할당되어 있는 메모리를 해제하기 때문에 그런 작업이 필요가 없다.
+	// 소멸자 작업을 확인하기 위해 소멸 시 현재 노드의 문자를 출력한다. ( 현재 노드가 문자가 없다면 root 노드임 )
+	~Trie() {
+		// 스마트 포인터를 사용하기 전엔 이렇게 반복문을 다 돌면서 하나하나 확인하며
+		// 반드시 메모리 해제 작업을 해주어야 했다.
+		//for (int i = 0; i < 26; i++)
+		//	if (child[i]) delete child[i];
+		
+		value != '\0' ? cout << value << " 소멸" << endl : cout << "root 소멸" << endl;
+	}
+	// 현재 노드가 가질 수 있는 문자열 개수 읽기 함수
+	int GetCount() { return  count; }
+	// 문자열 삽입
+	void Insert(const char* _value) {
+		// *_value 은 const char* 의 첫번째 위치를 가르키게 되므로 첫번째 문자를 뜻한다.
+		// 문자열에 끝에 도달하면 마무리
+		if (*_value == '\0') finish = true;
+		else
+		{
+			// 이는 아스키코드 - 아스키코드 를 뜻한다.
+			// 문자 - 알파벳 소문자를 하면 0~25 의 값으로 얻을 수 있다.			
+			// (ex. 'b' - 'a' = 1 )
+			// 이는 즉 자식 노드의 위치로 쓸 수 있게 된다.
+			int current = *_value - ALPHABET;
+			
+			// 현재 자식 노드 중 해당 문자를 가진 노드가 없다면
+			if (child[current] == NULL)
+			{
+				// 노드 추가
+				child[current] = make_unique<Trie>();
+				// 해당 노드의 문자 저장
+				child[current]->value = *_value;
+			}
+			// 재귀적인 작업을 통해 문자열이 끝날때까지 위 작업을 반복한다.
+			// _value + 1 은 현재 작업 완료된 문자의 다음 문자 위치라는 뜻이다.
+			child[current]->Insert(_value + 1);
+			// 현재 노드가 가질 수 있는 문자열 개수 증가
+			count++;
+		}
+	}
+	// 문자열 찾기
+	Trie* Find(const char* _value) {
+		// 찾고자 하는 문자열의 끝에 도착했거나, 와일드 문자에 도달했다면 현재 노드를 반환한다.
+		if (*_value == '\0' || *_value == '?') return this;
+		// 자식 노드의 위치 추정
+		int current = *_value - ALPHABET;
+		// 만약 해당 위치의 자식 노드가 NULL 이 아니라면 찾고 있는 문자열의 다음 문자를 찾았다는 뜻이다.
+		// 이 역시 삽입과 마찬가지로 재귀적으로 반복한다.
+		// 만일 다음 문자가 없다면 해당 문자열은 등록되어 있지 않음으로 NULL 을 반환한다.
+		return child[current] != NULL ? child[current]->Find(_value + 1) : NULL;
+	}
+};
+
+// 가사 찾기 알고리즘
+vector<int> LyricsFind_Trie(vector<string> _words, vector<string> _queries)
+{
+	// 정답 개수를 저장할 vector 컨테이너
+	// 검색어 크기만큼 크기 할당
+	vector<int> answer = vector<int>(_queries.size());
+	// int 형은 가사의 문자열 길이에 맞게 따로 저장하기 위한 key
+	// pair 로 사용한 이유는 가사 문자열들을 뒤에서 부터 반대로 찾아야 하는 경우도 있기 때문에
+	// 정방향 Trie , 역방향 Trie 이렇게 가지게 된다.
+	map<int, pair<shared_ptr<Trie>, shared_ptr<Trie>>> words;
+	
+	// 트라이 자료구조를 이용해 정리한 가사 단어
+	for (int i = 0; i < _words.size(); i++)
+	{
+		// 현재 위치의 가사 단어 저장
+		string word = _words[i];
+		
+		// 만약 현재 가사의 길이가 처음이라면 아직 Trie 가 만들어지지 않았으므로 생성해줌
+		if (words[word.length()].first == nullptr)
+		{
+			// shared_ptr 은 포인터를 참조할 때마다 개수를 증가시키고, reset() 으로 개수를 감소시켜
+			// 포인터를 관리해주는 기능이다.
+			// unipue_ptr 은 다른 포인터로 이동 시 이전 포인터를 사용할 수 없기 때문에
+			// shared_ptr 을 사용하게 되었다.
+			words[word.length()].first = make_shared<Trie>();
+			words[word.length()].second = make_shared<Trie>();
+		}
+
+		// 정방향 문자열 Trie 에 삽입
+		words[word.length()].first->Insert(word.c_str());
+		// 문자열 뒤집기
+		reverse(word.begin(), word.end());
+		// 역방향 문자열 Trie 에 삽입
+		words[word.length()].second->Insert(word.c_str());
+	}
+
+	for (int i = 0; i < _queries.size(); i++)
+	{
+		// 현재 위치의 검색어 저장
+		string querie = _queries[i];
+		// 유사 검색어 개수
+		int count = 0;
+
+		// 만일 현재 검색어 길이가 가사 key 값에 없다면 유사 검색어를 찾지 못함으로 검사 후 작업
+		if (words.find(querie.length()) != words.end())
+		{
+			// 검색어 길이와 동일한 가사들이 저장된 순방향 Trie 참조
+			shared_ptr<Trie> trie = words[querie.length()].first;
+			// 만약 검색어 첫번째 문자가 와일드 문자라면 역방향으로 찾는 것이 효율적임
+			if (querie.find_first_of('?') == 0)
+			{
+				// 참조 해제
+				trie.reset();
+				// 검색어 뒤집기
+				reverse(querie.begin(), querie.end());
+				// 역방향 Trie 참조
+				trie = words[querie.length()].second;
+			}
+
+			// Trie 에서 유사 검색어 찾기
+			Trie* find = trie->Find(querie.c_str());
+			// 유사 검색어가 있다면 유사 검색어 개수를 저장
+			if (find != NULL)
+				count = find->GetCount();
+			// 참조 해제
+			trie.reset();
+		}
+		// 결과값 vector 에 저장
+		answer[i] = count;
+	}
+	// 결과값 반환
+	return answer;
+}
